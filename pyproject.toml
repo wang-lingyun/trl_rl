@@ -18,6 +18,9 @@ track = ["trackio"]
 # vLLM ships Linux wheels only; the GPU box is x86_64 Ubuntu. (Tests in tests/ only need torch.)
 environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
 package = false
+# Triton JIT-compiles a launcher against Python.h; Ubuntu's system python3 has no headers (no python3-dev),
+# uv's managed CPython does.
+python-preference = "only-managed"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
