@@ -42,6 +42,15 @@ Same task and prompts, all weights trained, synced to vLLM on the same GPU witho
 | full-ipc-smoke2 | ipc | 5 (64 prompts) | 0.07 s | 0.993-1.000 | 24.9 GB | works (first attempt failed: `pidfd_getfd` blocked by ptrace_scope=1 under expandable segments) |
 | r200-full-file, lr 1e-5 | file | 200 | ~0.45 s | 0.998-1.001 throughout | ~24 GB | **diverged after ~step 120**: completion length 330 → 600, clipped 2% → 30%, entropy 0.25 → 0.52, train reward 0.62 → 0.33. GSM8K test **15.6%** (542/1319 truncated) |
 | **r200-full-file-lr2e-6** | file | 200 (395 s) | 0.44-0.49 s | 1.000 throughout | 24.1 GB | stable: train reward 0.61 → 0.84, length 260-360, clipped ≤ 6%. GSM8K test **69.75%** (66 truncated) |
+| r200-full-ipc-lr2e-6 | ipc | 200 (**301 s**) | 0.07-0.11 s (mean 0.089) | 1.000 throughout | 25.6 GB | stable: train reward 0.70 → 0.77, length 300-350, clipped ≤ 2%. GSM8K test 65.35% (44 truncated) |
+
+**IPC vs file, same settings:** IPC trains 24% faster (18 s of total sync vs 94 s over 200 syncs), and vLLM serves the
+trainer's weights at least as faithfully: mean log-prob difference 0.0128 vs 0.0137, masked tokens 0.00006 vs
+0.0001, mean per-step max ratio 1.52 vs 1.56. The diverged lr 1e-5 run shows 0.045 / 0.007 / 5.3 on the same metrics,
+so they do react. The two final models still differ on the test set (65.35% vs 69.75%; paired 117 vs 175, p=0.0008),
+but that compares two model instances, not two sync methods. Async RL runs diverge even with the same seed, and the
+sync metrics rule out IPC delivering wrong weights. Repeated runs per mode are needed to measure that run-to-run
+spread; this IPC run isn't significantly above base (165 vs 149, p=0.4).
 
 GSM8K test (1319, greedy, boxed hint), paired McNemar on the same questions:
 
