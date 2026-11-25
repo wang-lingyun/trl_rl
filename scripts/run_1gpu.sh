@@ -33,7 +33,12 @@ PORT="$PORT" "$REPO/scripts/serve_vllm.sh" > "$RUN_DIR/vllm.log" 2>&1 &
 VLLM_PID=$!
 echo "vLLM pid $VLLM_PID (log: $RUN_DIR/vllm.log)"
 
+nvidia-smi --query-gpu=timestamp,memory.used,utilization.gpu,power.draw --format=csv -l 10 \
+  > "$RUN_DIR/gpu.csv" 2>/dev/null &
+SMI_PID=$!
+
 cleanup() {
+  kill "$SMI_PID" 2>/dev/null || true
   if kill -0 "$VLLM_PID" 2>/dev/null; then
     echo "stopping vLLM ($VLLM_PID)"
     kill -TERM "$VLLM_PID" 2>/dev/null || true

@@ -16,10 +16,18 @@ import os
 logger = logging.getLogger("train_async_grpo_1gpu")
 
 
-def gsm8k_to_prompt(sample):
-    """GSM8K row -> conversational prompt + gold answer (the number after '####')."""
+BOXED_HINT = "Please reason step by step, and put your final answer within \\boxed{}."
+
+
+def gsm8k_to_prompt(sample, boxed_hint=True):
+    """GSM8K row -> conversational prompt + gold answer (the number after '####').
+
+    With `boxed_hint`, the question ends with the usual boxed-answer instruction. Without it, base Qwen3-0.6B boxes
+    only ~44% of answers, and the first RL steps mostly learn that format (see docs/results.md) rather than math.
+    """
+    question = f"{sample['question']}\n{BOXED_HINT}" if boxed_hint else sample["question"]
     return {
-        "prompt": [{"role": "user", "content": sample["question"]}],
+        "prompt": [{"role": "user", "content": question}],
         "solution": sample["answer"].split("####")[-1].strip(),
     }
 
@@ -45,6 +53,7 @@ def parse_args():
         "top-k logprobs it needs roughly halve generation throughput",
     )
     p.add_argument("--train-size", type=int, default=None, help="use only the first N GSM8K train rows")
+    p.add_argument("--no-boxed-hint", action="store_true", help="plain questions, without the \\boxed{} instruction")
     p.add_argument("--save-steps", type=int, default=50)
     p.add_argument("--report-to", default="none", help="none | trackio | wandb | tensorboard")
     p.add_argument("--attn-backend", default="auto", choices=["auto", "trl", "fa2", "sdpa"])
@@ -73,7 +82,9 @@ def main():
     dataset = load_dataset("openai/gsm8k", "main", split="train")
     if args.train_size:
         dataset = dataset.select(range(min(args.train_size, len(dataset))))
-    dataset = dataset.map(gsm8k_to_prompt, remove_columns=dataset.column_names)
+    dataset = dataset.map(
+        gsm8k_to_prompt, fn_kwargs={"boxed_hint": not args.no_boxed_hint}, remove_columns=dataset.column_names
+    )
 
     config = AsyncGRPOConfig(
         output_dir=args.output_dir,
@@ -119,6 +130,7 @@ def main():
 
     final_dir = os.path.join(args.output_dir, "final_adapter")
     trainer.save_model(final_dir)
+    trainer.state.save_to_json(os.path.join(args.output_dir, "trainer_state.json"))  # full per-step log_history
     logger.info(f"saved final LoRA adapter to {final_dir}")
 
 
