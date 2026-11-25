@@ -3,6 +3,8 @@ name = "trl-rl"
 version = "0.1.0"
 description = "Minimal single-GPU async GRPO (TRL AsyncGRPOTrainer + vLLM) for an RTX 5090"
 readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 requires-python = ">=3.11,<3.14"
 dependencies = [
     # trl[vllm] pins vllm<0.34; AsyncGRPOTrainer became stable API in 1.18

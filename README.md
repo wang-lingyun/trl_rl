@@ -112,3 +112,7 @@ What to watch in the logs: `reward`, `rollout/queue_size`, `perf/rollout_wait_s`
 The vLLM server runs with `VLLM_SERVER_DEV_MODE=1`, which exposes pause, weight and adapter-loading endpoints.
 `serve_vllm.sh` binds it to `127.0.0.1` only. Other local users on the box can still reach localhost, so
 stop the server when you're not training (`run_1gpu.sh` stops it on exit).
+
+## License
+
+[Apache-2.0](LICENSE), the same license as TRL.
