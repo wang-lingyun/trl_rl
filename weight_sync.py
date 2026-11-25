@@ -122,6 +122,13 @@ class IPCWeightTransfer(_SameGPUWeightTransfer):
         self.buffer_bytes = buffer_bytes
 
     def init_weight_transfer(self) -> None:
+        if "expandable_segments:true" in os.environ.get("PYTORCH_CUDA_ALLOC_CONF", "").replace(" ", "").lower():
+            raise RuntimeError(
+                "CUDA IPC from PyTorch's expandable segments makes vLLM fetch the buffer's file descriptor with "
+                "pidfd_getfd, which kernel.yama.ptrace_scope=1 (Ubuntu's default) refuses between unrelated "
+                "processes ('pidfd_getfd: Operation not permitted'). Run the trainer with "
+                "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:False (scripts/run_1gpu.sh does this for SYNC=ipc)."
+            )
         self.vllm.wait_for_server_ready()
         try:
             self.vllm.init_weight_transfer_engine({"packed": True})

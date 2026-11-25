@@ -58,7 +58,10 @@ if ! "$PY" "$REPO/scripts/wait_for_server.py" --url "$URL" --timeout 900 --pid "
 fi
 nvidia-smi --query-gpu=name,memory.used,memory.total --format=csv | tee "$RUN_DIR/gpu_mem_after_vllm.csv"
 
-PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}" \
+# Expandable segments cut fragmentation, but CUDA IPC from them goes through pidfd_getfd, which Ubuntu's
+# Yama ptrace_scope=1 blocks between unrelated processes. So SYNC=ipc keeps the classic allocator.
+if [ "$SYNC" = ipc ]; then DEFAULT_ALLOC_CONF="expandable_segments:False"; else DEFAULT_ALLOC_CONF="expandable_segments:True"; fi
+PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-$DEFAULT_ALLOC_CONF}" \
   "$PY" "$REPO/train_async_grpo_1gpu.py" \
   --vllm-url "$URL" \
   --output-dir "$RUN_DIR/output" \
