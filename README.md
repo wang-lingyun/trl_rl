@@ -47,13 +47,24 @@ docs/research.md           notes from reading the article and the TRL 1.18.2 sou
 
 ## Setup (on the GPU box)
 
-Needs an NVIDIA driver ≥ 580: torch 2.14 / vLLM 0.33 are CUDA 13 builds.
+Needs an NVIDIA driver ≥ 580 (torch 2.14 / vLLM 0.33 are CUDA 13 builds) and a C compiler for Triton
+(`sudo apt install build-essential`). No CUDA toolkit is needed: the FlashInfer sampler, which would JIT with nvcc,
+is turned off.
 
 ```bash
+# on the Mac
+scripts/sync.sh push                      # rsync code to gpu5090:~/src/trl_rl (GPU_HOST=gpu5090-lan if Tailscale is off)
+# on the box
 cd ~/src/trl_rl
-uv sync                                   # .venv with the pinned stack (uv.lock)
+~/.local/bin/uv sync --frozen             # .venv with the pinned stack (uv.lock), uv-managed CPython 3.12
 .venv/bin/python scripts/check_env.py --attn
 ```
+
+Gotchas this repo already handles. Keep them in mind if you change the stack:
+
+- FA4 gives wrong gradients on sm_120. `attn_compat.py` picks FA2.
+- vLLM `/server_info` returns 500 in a uv venv with no pip on PATH. `pip` is a dependency, and the scripts export PATH.
+- vLLM's FlashInfer top-k/top-p sampler needs nvcc. `VLLM_USE_FLASHINFER_SAMPLER=0` turns it off.
 
 ## Run
 
@@ -82,6 +93,16 @@ for `train_async_grpo_1gpu.py`:
 | `--learning-rate` | 5e-5 | LoRA LR. TRL's full-FT GSM8K example uses 1e-5 |
 | `--score-centering` | off | TRL's default loss. Off because with one API server its extra logprobs slow generation |
 | `--attn-backend` | auto | `trl` (FA4), `fa2`, `sdpa`, or `auto` to probe |
+
+Evaluate on GSM8K test (offline vLLM, greedy; run it when no training is using the GPU):
+
+```bash
+.venv/bin/python eval_gsm8k.py --boxed-hint                                        # base model
+.venv/bin/python eval_gsm8k.py --boxed-hint --adapter runs/<ts>/output/final_adapter
+```
+
+Training prompts end with "put your final answer within \boxed{}" (`--no-boxed-hint` turns it off).
+Without it, the first RL steps mostly teach the model to box its answer, not math. See [docs/results.md](docs/results.md).
 
 What to watch in the logs: `reward`, `rollout/queue_size`, `perf/rollout_wait_s` (trainer starved = generation-bound),
 `rollout/backpressure_s` (generation held back = trainer-bound), `sample/staleness_mean`, `perf/weight_sync_s`.
