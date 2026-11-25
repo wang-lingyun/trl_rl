@@ -49,7 +49,8 @@ def parse_args():
     p.add_argument("--weight-sync-steps", type=int, default=1, help="optimizer steps between weight syncs")
     p.add_argument("--max-steps", type=int, default=200)
     p.add_argument("--learning-rate", type=float, default=None,
-                   help="default 5e-5 for LoRA, 1e-5 for full fine-tuning (TRL's Qwen3-0.6B GSM8K example)")
+                   help="default 5e-5 for LoRA, 2e-6 for full fine-tuning (1e-5 diverged after ~120 steps here, "
+                   "see docs/results.md)")
     p.add_argument("--per-device-batch-size", type=int, default=16)
     p.add_argument("--grad-accum", type=int, default=2)
     p.add_argument("--num-generations", type=int, default=8)
@@ -72,7 +73,7 @@ def parse_args():
     p.add_argument("--seed", type=int, default=42)
     args = p.parse_args()
     if args.learning_rate is None:
-        args.learning_rate = 5e-5 if args.weight_sync == "lora" else 1e-5
+        args.learning_rate = 5e-5 if args.weight_sync == "lora" else 2e-6
     return args
 
 

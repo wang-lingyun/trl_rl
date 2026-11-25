@@ -32,6 +32,33 @@ compared against the base + hint number.
 | smoke-2 | 5 (64 prompts) | 13 s train (+24 s vLLM start, warm cache) | ~0.28 s | 1-4 | ~1.00 | 0.19-0.25 | plain prompts |
 | r200-hint | 200 (full train set, 32 samples/step) | 418 s train (~2.1 s/step) | 0.28-0.37 s | mean 0.4-4, max 4 | 0.998-1.001 | ~0.6 at the start, 0.73 over the last 10 steps (noisy) | hint prompts, lr 5e-5, `score_centering=False`; peak VRAM 16.0 / 32.6 GB (vLLM + trainer), mean GPU util 70% |
 
+## Full fine-tuning (no LoRA)
+
+Same task and prompts, all weights trained, synced to vLLM on the same GPU without NCCL (`weight_sync.py`).
+
+| Run | Sync | Steps | Weight sync | IS ratio | Peak VRAM | Outcome |
+|---|---|---|---|---|---|---|
+| full-file-smoke | file | 5 (64 prompts) | 0.43-0.53 s | 0.999-1.005 | 24.0 GB | works; final_model saved |
+| full-ipc-smoke2 | ipc | 5 (64 prompts) | 0.07 s | 0.993-1.000 | 24.9 GB | works (first attempt failed: `pidfd_getfd` blocked by ptrace_scope=1 under expandable segments) |
+| r200-full-file, lr 1e-5 | file | 200 | ~0.45 s | 0.998-1.001 throughout | ~24 GB | **diverged after ~step 120**: completion length 330 → 600, clipped 2% → 30%, entropy 0.25 → 0.52, train reward 0.62 → 0.33. GSM8K test **15.6%** (542/1319 truncated) |
+| **r200-full-file-lr2e-6** | file | 200 (395 s) | 0.44-0.49 s | 1.000 throughout | 24.1 GB | stable: train reward 0.61 → 0.84, length 260-360, clipped ≤ 6%. GSM8K test **69.75%** (66 truncated) |
+
+GSM8K test (1319, greedy, boxed hint), paired McNemar on the same questions:
+
+| Model | Accuracy | vs base run 1 | vs base run 2 | vs LoRA r200 |
+|---|---|---|---|---|
+| base | 64.1% / 64.75% | | | |
+| LoRA r200 (lr 5e-5) | 67.4% | 170 vs 127, p=0.015 | 165 vs 130, p=0.048 | |
+| **full FT r200 (lr 2e-6)** | **69.75%** | 178 vs 104, p=1e-5 | 175 vs 109, p=1e-4 | 160 vs 129, p=0.08 |
+
+So full FT at lr 2e-6 is clearly better than base. It's probably better than LoRA after the same 200 steps, but
+one run each isn't enough to be sure.
+
+The lr 1e-5 failure is an optimization problem, not a sync problem. The importance ratio stayed at ~1.00 for all
+200 steps, so vLLM always served the trainer's current weights. 1e-5 is the LR TRL's full-FT GSM8K example uses,
+but that example runs TRL's default score-centering loss on two GPUs; here it's the clipped loss
+(`score_centering=False`). Watch `completions/clipped_ratio` and `entropy`: they moved ~20 steps before reward fell.
+
 Sync cost is small on one GPU: the adapter goes to vLLM in ~0.3 s per step. The importance ratio stays at ~1.0, so the
 trainer (FA2, LoRA, bf16 autocast) and vLLM (bf16 + LoRA) agree on log-probabilities. Peak VRAM of 16 GB leaves room to
 raise `GPU_MEM_UTIL`, the batch size, or the model size (e.g. Qwen3-1.7B).
