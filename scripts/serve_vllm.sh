@@ -24,6 +24,9 @@ MAX_LORAS="${MAX_LORAS:-6}"          # >= trainer --max-staleness + 2
 # Pause/resume + /server_info need DEV_MODE; /v1/load_lora_adapter needs runtime LoRA updating.
 export VLLM_SERVER_DEV_MODE=1
 export VLLM_ALLOW_RUNTIME_LORA_UPDATING=1
+# FlashInfer's top-k/top-p sampler is JIT-compiled with nvcc, and the box has no CUDA toolkit. Any request
+# with top_k/top_p (Qwen3's generation_config sets 20 / 0.95) would kill the engine. Use vLLM's torch sampler.
+export VLLM_USE_FLASHINFER_SAMPLER="${VLLM_USE_FLASHINFER_SAMPLER:-0}"
 
 # --weight-transfer-config is kept as upstream recommends; it is only used if the trainer falls back to
 # merged sync, which train_async_grpo_1gpu.py refuses to do on one GPU.
