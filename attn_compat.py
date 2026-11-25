@@ -3,8 +3,10 @@
 AsyncGRPOTrainer (TRL 1.18) packs samples into a prefix tree and runs attention through
 ``flash_attn_varlen_func`` from a Hub kernel (``trl.trainer.async_grpo_trainer._flash_attn``):
 FlashAttention-3 below compute capability 10, FlashAttention-4 at 10 and above. FA4 targets datacenter
-Blackwell (B200, sm_100). The RTX 5090 is consumer Blackwell (sm_120), which lacks some of the
-instructions FA4 uses, so it may fail there.
+Blackwell (B200, sm_100). The RTX 5090 is consumer Blackwell (sm_120). Measured there on 2026-11-24
+(kernel `_flash_attn4_cuda_5fe9dbb`, torch 2.14): the FA4 forward and dQ are right, but **dK/dV are
+wrong (relative error 0.3-1.3) as soon as a varlen batch holds more than one sequence**. That is
+every batch TRL packs, so training would run on corrupted gradients with no error raised.
 
 This module tries candidate kernels on the real GPU, checks each one against a float32 reference on a
 small packed tree (forward and backward), and installs the first correct one in place of TRL's choice:
@@ -237,7 +239,14 @@ def load_backend(name: str):
     if name == "fa2":
         from kernels import get_kernel
 
-        return get_kernel("kernels-community/flash-attn2")
+        # kernels >= 0.17 requires an explicit version. v4 has torch 2.14 builds (v1/v2 stop at 2.10/2.11).
+        error = None
+        for version in (4, 3):
+            try:
+                return get_kernel("kernels-community/flash-attn2", version=version)
+            except Exception as exc:  # noqa: BLE001 - try the next version
+                error = exc
+        raise error
     if name == "sdpa":
         return types.SimpleNamespace(flash_attn_varlen_func=sdpa_varlen_attn)
     raise ValueError(f"unknown attention backend {name!r}, expected one of {BACKENDS}")

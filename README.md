@@ -12,7 +12,7 @@ Based on the Hugging Face write-up [AsyncGRPOTrainer is stable](https://huggingf
 |---|---|---|
 | Trainer pushes full weights to vLLM over **NCCL** after each step | NCCL refuses two ranks on the same device ("Duplicate GPU detected") | Train a **LoRA adapter**. With `--enable-lora` on the server, TRL's adapter-only sync writes the adapter to disk and loads it with `POST /v1/load_lora_adapter`. There is no NCCL. The script refuses to start if it would fall back to merged (NCCL) sync. |
 | vLLM owns its GPU | vLLM grabs 90% of VRAM by default | `--gpu-memory-utilization 0.35` (~11 GB of 32 GB), and the trainer uses the rest |
-| Tree-packed training uses FlashAttention-4 on Blackwell | FA4 targets B200 (sm_100); the 5090 is sm_120 and may not run it | `attn_compat.py` checks FA4, then FA2, then an SDPA fallback on the real GPU (forward and backward against a float32 reference) and installs the first that passes |
+| Tree-packed training uses FlashAttention-4 on Blackwell | **Measured on the 5090 (sm_120): FA4's forward is right but its dK/dV are wrong (rel. error 0.3-1.3) whenever a batch packs more than one sequence**, which is always. There is no error, just bad gradients | `attn_compat.py` checks FA4, then FA2 (hub v4), then an SDPA fallback on the real GPU, forward and backward against a float32 reference, and installs the first that passes. On the 5090 that is **FA2** |
 
 Generation and training still run at the same time (async): the rollout worker keeps sending requests
 to vLLM while the trainer runs steps on queued samples. Each sync is a short pause plus a ~80 MB adapter load (20M LoRA parameters, fp32).

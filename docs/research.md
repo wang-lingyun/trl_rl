@@ -46,6 +46,24 @@ Sources: the Space [trl-lib/async-grpo-stable](https://huggingface.co/spaces/trl
   (FA4 → hub FA2 → SDPA per-segment loop). The SDPA path is checked on CPU in `tests/`.
 - The other kernels are Triton (`trl/kernels/*`, fused LM head), which supports sm_120.
 
+### Measured on the RTX 5090 (2026-11-24, torch 2.14.0+cu130, driver 595.99.02)
+
+Relative gradient error against a float32 reference (bf16 inputs, 16 query / 8 KV heads, head_dim 128):
+
+| Case | FA4 fwd | dQ | dK | dV |
+|---|---|---|---|---|
+| one sequence, L=64 or 37 | 0.008 | 0.004 | 0.003 | 0.003 |
+| two root sequences (plain varlen 37+50) | 0.008 | 0.004 | **1.15** | **1.30** |
+| prompt + one branch (Lq < Lk) | 0.008 | 0.004 | **0.82** | **0.26** |
+| packed tree (5 segments, 2 roots) | 0.008 | 0.004 | **0.86** | **0.76** |
+| one sequence, MHA (kv heads = q heads) | 0.008 | 0.005 | 0.004 | 0.004 |
+
+So FA4 (`kernels-community/flash-attn4` v1, `_flash_attn4_cuda_5fe9dbb`) computes wrong dK/dV on sm_120 for any
+multi-sequence varlen batch. That's a silent gradient bug for AsyncGRPOTrainer on this GPU. Possibly worth an
+upstream issue (kernels-community / TRL).
+`kernels-community/flash-attn2` needs an explicit `version=` with kernels 0.17. v1/v2 have no torch 2.14 build;
+v3 and v4 load and pass (bwd rel. error ~0.007). The SDPA loop passes too (0.009).
+
 ## Config facts worth remembering (AsyncGRPOConfig, 1.18.2)
 
 - Defaults: `num_generations=8`, `max_completion_length=2048`, `learning_rate=1e-6` (constant), `bf16=True`,
