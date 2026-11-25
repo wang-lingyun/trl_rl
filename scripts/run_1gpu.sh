@@ -2,8 +2,10 @@
 # One command for a single-GPU run: vLLM server in the background, trainer in the foreground, same GPU.
 # Logs and outputs go to runs/<timestamp>/. Extra args go to train_async_grpo_1gpu.py.
 #
-#   scripts/run_1gpu.sh --max-steps 5 --train-size 64     # smoke test
-#   scripts/run_1gpu.sh                                   # default 200-step run
+#   scripts/run_1gpu.sh --max-steps 5 --train-size 64     # smoke test (LoRA)
+#   scripts/run_1gpu.sh                                   # default 200-step LoRA run
+#   SYNC=file scripts/run_1gpu.sh                         # full fine-tuning, weights via /dev/shm + reload
+#   SYNC=ipc  scripts/run_1gpu.sh                         # full fine-tuning, CUDA IPC (see serve_vllm.sh warning)
 #
 # For long runs start it detached so an SSH drop doesn't kill it, e.g.
 #   setsid nohup scripts/run_1gpu.sh > runs/last.out 2>&1 &
@@ -16,6 +18,7 @@ export PATH="$REPO/.venv/bin:$HOME/.local/bin:$PATH"
 export VIRTUAL_ENV="$REPO/.venv"
 PORT="${PORT:-8000}"
 URL="http://127.0.0.1:$PORT"
+export SYNC="${SYNC:-lora}"   # lora | file | ipc: read by serve_vllm.sh, passed to the trainer as --weight-sync
 
 RUN_DIR="${RUN_DIR:-runs/$(date +%Y%m%d-%H%M%S)}"
 mkdir -p "$RUN_DIR"
@@ -59,4 +62,5 @@ PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}" \
   "$PY" "$REPO/train_async_grpo_1gpu.py" \
   --vllm-url "$URL" \
   --output-dir "$RUN_DIR/output" \
+  --weight-sync "$SYNC" \
   "$@" 2>&1 | tee "$RUN_DIR/train.log"

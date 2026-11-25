@@ -1,9 +1,15 @@
 #!/usr/bin/env bash
-# Start the vLLM generation server for single-GPU async GRPO. It shares the GPU with the trainer, so
-# its memory is capped (GPU_MEM_UTIL) and weights come in as LoRA adapters over HTTP, not over NCCL.
+# Start the vLLM generation server for single-GPU async GRPO. It shares the GPU with the trainer, so its memory is
+# capped (GPU_MEM_UTIL). SYNC picks how the trainer's weights reach it, without NCCL. It must match the trainer's
+# --weight-sync:
+#
+#   SYNC=lora  (default) LoRA adapter files via /v1/load_lora_adapter
+#   SYNC=file  full weights: safetensors in /dev/shm, reloaded via /collective_rpc reload_weights
+#   SYNC=ipc   full weights: vLLM's CUDA-IPC backend. Needs VLLM_ALLOW_INSECURE_SERIALIZATION=1 (pickle), so any
+#              local user who can reach the port can run code as you
 #
 #   scripts/serve_vllm.sh                      # defaults below
-#   GPU_MEM_UTIL=0.4 scripts/serve_vllm.sh     # override any setting through the environment
+#   SYNC=file GPU_MEM_UTIL=0.3 scripts/serve_vllm.sh
 #   scripts/serve_vllm.sh --enforce-eager      # extra args go straight to `vllm serve`
 set -euo pipefail
 
@@ -14,23 +20,44 @@ export PATH="$REPO/.venv/bin:$HOME/.local/bin:$PATH"
 export VIRTUAL_ENV="$REPO/.venv"
 
 MODEL="${MODEL:-Qwen/Qwen3-0.6B}"
-HOST="${HOST:-127.0.0.1}"          # localhost only: DEV_MODE exposes pause / weight / adapter endpoints
+SYNC="${SYNC:-lora}"
+HOST="${HOST:-127.0.0.1}"          # localhost only: DEV_MODE exposes pause / weight / adapter / collective_rpc endpoints
 PORT="${PORT:-8000}"
 GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.35}" # fraction of the WHOLE GPU vLLM may take (weights + KV cache + graphs)
 MAX_MODEL_LEN="${MAX_MODEL_LEN:-2048}"
 MAX_LORA_RANK="${MAX_LORA_RANK:-32}" # >= trainer --lora-r; one of 1 8 16 32 64 128 256 320 512
 MAX_LORAS="${MAX_LORAS:-6}"          # >= trainer --max-staleness + 2
 
-# Pause/resume + /server_info need DEV_MODE; /v1/load_lora_adapter needs runtime LoRA updating.
+# Pause/resume, /server_info and /collective_rpc need DEV_MODE.
 export VLLM_SERVER_DEV_MODE=1
-export VLLM_ALLOW_RUNTIME_LORA_UPDATING=1
 # FlashInfer's top-k/top-p sampler is JIT-compiled with nvcc, and the box has no CUDA toolkit. Any request
 # with top_k/top_p (Qwen3's generation_config sets 20 / 0.95) would kill the engine. Use vLLM's torch sampler.
 export VLLM_USE_FLASHINFER_SAMPLER="${VLLM_USE_FLASHINFER_SAMPLER:-0}"
 
-# --weight-transfer-config is kept as upstream recommends; it is only used if the trainer falls back to
-# merged sync, which train_async_grpo_1gpu.py refuses to do on one GPU.
-# No --api-server-count: runtime adapter loading works with a single API server only.
+case "$SYNC" in
+  lora)
+    # /v1/load_lora_adapter needs runtime LoRA updating. --weight-transfer-config is kept as upstream recommends;
+    # it is only used if the trainer falls back to merged sync, which train_async_grpo_1gpu.py refuses to do.
+    # No --api-server-count: runtime adapter loading works with a single API server only.
+    export VLLM_ALLOW_RUNTIME_LORA_UPDATING=1
+    SYNC_ARGS=(--weight-transfer-config '{"backend":"nccl"}' --enable-lora
+               --max-lora-rank "$MAX_LORA_RANK" --max-loras "$MAX_LORAS")
+    ;;
+  file)
+    SYNC_ARGS=()   # reload_weights over /collective_rpc needs nothing beyond DEV_MODE
+    ;;
+  ipc)
+    export VLLM_ALLOW_INSECURE_SERIALIZATION=1
+    echo "WARNING: SYNC=ipc enables VLLM_ALLOW_INSECURE_SERIALIZATION (pickle over HTTP). Any local user who can" \
+         "reach $HOST:$PORT can run code as $(id -un). Use SYNC=file on shared machines." >&2
+    SYNC_ARGS=(--weight-transfer-config '{"backend":"ipc"}')
+    ;;
+  *)
+    echo "unknown SYNC=$SYNC (expected lora, file or ipc)" >&2
+    exit 2
+    ;;
+esac
+
 exec "$VLLM_BIN" serve "$MODEL" \
   --host "$HOST" \
   --port "$PORT" \
@@ -38,8 +65,5 @@ exec "$VLLM_BIN" serve "$MODEL" \
   --gpu-memory-utilization "$GPU_MEM_UTIL" \
   --max-model-len "$MAX_MODEL_LEN" \
   --logprobs-mode processed_logprobs \
-  --weight-transfer-config '{"backend":"nccl"}' \
-  --enable-lora \
-  --max-lora-rank "$MAX_LORA_RANK" \
-  --max-loras "$MAX_LORAS" \
+  "${SYNC_ARGS[@]}" \
   "$@"
