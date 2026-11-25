@@ -12,6 +12,8 @@ set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO"
 PY="${PY:-$REPO/.venv/bin/python}"
+export PATH="$REPO/.venv/bin:$HOME/.local/bin:$PATH"
+export VIRTUAL_ENV="$REPO/.venv"
 PORT="${PORT:-8000}"
 URL="http://127.0.0.1:$PORT"
 

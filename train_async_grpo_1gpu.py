@@ -56,6 +56,8 @@ def parse_args():
 def main():
     args = parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    for noisy in ("httpx", "httpx2", "huggingface_hub", "urllib3", "filelock"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
 
     # Pick a tree-attention kernel that works on this GPU (FA4 may not run on an RTX 5090 / sm_120).
     from attn_compat import install_attention_backend

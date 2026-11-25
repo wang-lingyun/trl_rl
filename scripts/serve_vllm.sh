@@ -9,6 +9,9 @@ set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 VLLM_BIN="${VLLM_BIN:-$REPO/.venv/bin/vllm}"
+# Non-interactive SSH shells don't have ~/.local/bin (uv) or the venv on PATH; vLLM shells out to both.
+export PATH="$REPO/.venv/bin:$HOME/.local/bin:$PATH"
+export VIRTUAL_ENV="$REPO/.venv"
 
 MODEL="${MODEL:-Qwen/Qwen3-0.6B}"
 HOST="${HOST:-127.0.0.1}"          # localhost only: DEV_MODE exposes pause / weight / adapter endpoints

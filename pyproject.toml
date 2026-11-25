@@ -8,6 +8,9 @@ dependencies = [
     # trl[vllm] pins vllm<0.34; AsyncGRPOTrainer became stable API in 1.18
     "trl[vllm,kernels,math-verify,peft]==1.18.2",
     "vllm==0.33.0",
+    # vLLM's GET /server_info (which TRL calls to choose LoRA sync) runs `pip list`, falling back to `uv pip list`;
+    # with neither reachable it crashes with a 500 (None.splitlines()). Keep pip in the venv.
+    "pip",
 ]
 
 [dependency-groups]
