@@ -1,0 +1,23 @@
+[project]
+name = "trl-rl"
+version = "0.1.0"
+description = "Minimal single-GPU async GRPO (TRL AsyncGRPOTrainer + vLLM) for an RTX 5090"
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    # trl[vllm] pins vllm<0.34; AsyncGRPOTrainer became stable API in 1.18
+    "trl[vllm,kernels,math-verify,peft]==1.18.2",
+    "vllm==0.33.0",
+]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+track = ["trackio"]
+
+[tool.uv]
+# vLLM ships Linux wheels only; the GPU box is x86_64 Ubuntu. (Tests in tests/ only need torch.)
+environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

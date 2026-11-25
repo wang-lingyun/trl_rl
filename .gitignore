@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+
+# Runs, checkpoints, logs
+runs/
+outputs/
+*.log
+.vllm_lora/
+trackio/
+wandb/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
