@@ -52,6 +52,23 @@ but that compares two model instances, not two sync methods. Async RL runs diver
 sync metrics rule out IPC delivering wrong weights. Repeated runs per mode are needed to measure that run-to-run
 spread; this IPC run isn't significantly above base (165 vs 149, p=0.4).
 
+### Run-to-run spread (3 seeds per mode, `scripts/repeat_runs.sh`)
+
+Full FT, lr 2e-6, 200 steps, boxed hint; seeds 43 and 44 added to the seed-42 runs above. Runs alternated between
+modes.
+
+| Mode | Seed 42 | Seed 43 | Seed 44 | Mean ± sd | Train time (mean) | Sync per step |
+|---|---|---|---|---|---|---|
+| file | 69.75% | 69.07% | 69.07% | **69.30 ± 0.39%** | 385 s | 0.46-0.47 s |
+| ipc | 65.35% | 69.52% | 68.46% | **67.78 ± 2.17%** | 304 s | 0.088-0.089 s |
+
+- File vs IPC: 1.5 points apart, exact permutation test over all 20 splits p = 0.30, so **no detectable difference**.
+  IPC's lower mean comes from its seed-42 run; its other two runs sit next to file's.
+- Weight delivery matches in all 6 runs: mean log-prob difference 0.0125-0.0141, masked tokens ≤ 1e-4, mean
+  importance ratio 0.9999-1.0001.
+- All 6 full-FT runs beat base (64.1 / 64.75%); mean 68.54 ± 1.62%.
+- IPC saves ~80 s (~21%) of a ~6.5-minute run.
+
 GSM8K test (1319, greedy, boxed hint), paired McNemar on the same questions:
 
 | Model | Accuracy | vs base run 1 | vs base run 2 | vs LoRA r200 |

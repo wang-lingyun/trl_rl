@@ -41,8 +41,9 @@ SYNC=file scripts/run_1gpu.sh --max-steps 200     # full fine-tuning, safe defau
 SYNC=ipc  scripts/run_1gpu.sh --max-steps 200     # full fine-tuning, fastest sync, single-user machines only
 ```
 
-Result on GSM8K test (200 steps, ~7 min): base 64.1% → LoRA 67.4% → **full fine-tuning 69.75%** (`SYNC=file`,
-lr 2e-6). At lr 1e-5, full fine-tuning diverged after ~120 steps (15.6%). Details in [docs/results.md](docs/results.md).
+Result on GSM8K test (200 steps, ~5-7 min): base 64.1% → LoRA 67.4% → **full fine-tuning 69.3 ± 0.4%** (`SYNC=file`,
+lr 2e-6, 3 seeds) or 67.8 ± 2.2% (`SYNC=ipc`, 3 seeds; not significantly different, p = 0.30). At lr 1e-5, full
+fine-tuning diverged after ~120 steps (15.6%). Details in [docs/results.md](docs/results.md).
 
 Full fine-tuning saves `runs/<ts>/output/final_model/`. Evaluate it with
 `.venv/bin/python eval_gsm8k.py --boxed-hint --model runs/<ts>/output/final_model`.
